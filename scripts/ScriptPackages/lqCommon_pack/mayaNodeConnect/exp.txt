@@ -1,0 +1,12 @@
+if(frame>50) 
+{ 
+
+file1.frameExtension=-(int((frame-50)/110)+1)*99-int((frame-50)/110)*11+frame; 
+
+} 
+
+else{ 
+
+file1.frameExtension=-49;}
+
+

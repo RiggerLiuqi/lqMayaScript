@@ -1,0 +1,511 @@
+// --------------------------------------------------------------------------------------------------
+//
+// SHAPES
+//
+// blend shape editing tool for Maya
+//
+// required plugins:
+//   SHAPESTools
+//
+// Ingo Clemens
+// www.braverabbit.com
+//
+// copyright brave rabbit, Ingo Clemens 2014-2018
+//
+// --------------------------------------------------------------------------------------------------
+
+// --------------------------------------------------------------------------------------------------
+//
+// THE SOFTWARE PRODUCT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR
+// IMPLIED, INCLUDING, BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NON-INFRINGEMENT OF THIRD-PARTY RIGHTS. THE ENTIRE RISK AS TO THE QUALITY AND
+// PERFORMANCE OF THE SOFTWARE PRODUCT IS WITH YOU.
+// NEITHER BRAVE RABBIT NOR ITS SUPPLIERS WARRANT THAT THE FUNCTIONS CONTAINED IN THE SOFTWARE
+// PRODUCT WILL MEET YOUR REQUIREMENTS OR THAT THE OPERATION OF THE SOFTWARE PRODUCT WILL BE
+// UNINTERRUPTED OR ERROR-FREE. BRAVE RABBIT IS NOT OBLIGATED TO PROVIDE ANY UPDATES TO THE
+// SOFTWARE.
+// IN NO EVENT SHALL THE AUTHOR OF THIS SOFTWARE PRODUCT BE LIABLE FOR ANY SPECIAL, CONSEQUENTIAL,
+// INCIDENTAL, DIRECT OR INDIRECT DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR
+// LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, FOR PERSONAL INJURY, LOSS OF BUSINESS
+// INFORMATION, OR ANY OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR INABILITY TO USE THIS
+// PRODUCT, EVEN IF THE AUTHOR OF THIS SOFTWARE PRODUCT IS AWARE OF THE POSSIBILITY OF SUCH
+// DAMAGES AND KNOWN DEFECTS, ANY CLAIM BY A THIRD PARTY AND EVEN IF THE REMEDY FAILS OF ITS
+// ESSENTIAL PURPOSE.
+//
+// --------------------------------------------------------------------------------------------------
+
+
+global proc string shapesPI_createPoseInterpolatorNode()
+{
+	//
+	// create the pose interpolator
+	//
+	string $node[] = `treeView -q -si shpUI_driverTree`;
+	string $sel[] = `ls -sl`;
+	select -r $node[0];
+	
+	string $solver = "";
+	if (`shapesCommon_getMayaVersion` == 2016.5)
+		$solver = eval("createPoseInterpolatorNode(\"newPoseInterpolator\", 0)");
+	else
+		$solver = eval("createPoseInterpolatorNode(\"newPoseInterpolator\", 0, 0)");
+	string $shape = shapesCommon_getShapeNode($solver);
+	
+	// check if a control node is defined;
+	// a separate control node is necessary to restore a pose when the original driver
+	// is being driven, i.e. by a constraint;
+	// the default way to set up a pose interpolator for this case is too complicated
+	// so, defining a control node up front makes things much easier;
+	// unfortunately it doesn't work because the pose interpolator setup only checks
+	// for constraints and fails with any other connections so that the pose cannot
+	// be restored
+	string $control = `textField -q -tx shpUI_controlField`;
+	string $items[] = stringToStringArray($control, ",");
+	if ($control != "" && $items[0] != $node[0])
+		select -r $items[0];
+	// if no control is assigned simply use the selected driver for the neutral poses
+	else
+		select -r $node[0];
+	
+	createNeutralPoses $shape;
+	
+	select -r $sel;
+	
+	return $shape;
+}
+
+
+global proc shapesPI_addNeutralPoses( string $solver )
+{
+	//
+	// delete the neutral poses
+	//
+	createNeutralPoses $solver;
+}
+
+
+global proc shapesPI_deleteNeutralPose( string $solver )
+{
+	//
+	// delete the neutral poses
+	//
+	catchQuiet(`poseInterpolator -e -deletePose neutral $solver`);
+	catchQuiet(`poseInterpolator -e -deletePose neutralSwing $solver`);
+	catchQuiet(`poseInterpolator -e -deletePose neutralTwist $solver`);
+}
+
+
+global proc int shapesPI_addPose( string $solver, string $target )
+{
+	//
+	// add a new pose to the pose interpolator
+	//
+	int $index = poseInterpolatorAddPose($solver, $target);
+	setAttr ($solver + ".pose[" + $index + "].poseType") `optionVar -q SHAPESDefaultPoseMode`;
+	return $index;
+}
+
+
+global proc shapesPI_deletePose( string $solver, string $target )
+{
+	//
+	// remove the pose from the pose interpolator
+	//
+	poseInterpolator -e -deletePose $target $solver;
+}
+
+
+global proc shapesPI_connectCustomControl( string $solver, string $control )
+{
+	//
+	// connect the attributes of a custom node to the pose interpolator
+	// to be able to return to the individual poses
+	//
+	string $attrList[] = {"rotateX", "rotateY", "rotateZ"};
+	for ($i = 0; $i < size($attrList); $i ++)
+	{
+		// start at the first index, to mimic what the pose interpolator scripts do
+		connectAttr -f ($control + "." + $attrList[$i]) ($solver + ".driver[0].driverController[" + ($i + 1) + "]");
+	}
+}
+
+
+global proc shapesPI_mirrorConnectDriver( string $node, string $solver )
+{
+	//
+	// establish the connection from the mirror driver to the mirrored pose interpolator
+	//
+	connectAttr -f ($node + ".jointOrient") ($solver  + ".driver[0].driverOrient");
+	connectAttr -f ($node + ".matrix") ($solver  + ".driver[0].driverMatrix");
+	connectAttr -f ($node + ".rotateAxis") ($solver  + ".driver[0].driverRotateAxis");
+	connectAttr -f ($node + ".rotateOrder") ($solver  + ".driver[0].driverRotateOrder");
+}
+
+
+global proc string shapesPI_addRbfAttributes( string $solver, int $add )
+{
+	//
+	// add the default weight driver attributes to the given node
+	//
+	string $cmd;
+	
+	$cmd += "addAttr -ln \"twistAxis\" -at \"long\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"opposite\" -at \"bool\" " + $solver + ";\n";
+	
+	$cmd += "addAttr -ln \"driverList\" -sn \"dl\" -at \"compound\" -nc 3 -m -h 1 " + $solver + ";\n";
+	$cmd += "addAttr -ln \"driverInput\" -sn \"di\" -dt \"matrix\" -h 1 -p \"driverList\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"controlNode\" -sn \"cn\" -at \"message\" -p \"driverList\" " + $solver + ";\n";
+	
+	$cmd += "addAttr -ln \"poseList\" -sn \"p\" -at \"compound\" -nc 6 -m -h 1 -p \"driverList\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"poseMatrix\" -sn \"pmat\" -dt \"matrix\" -p \"poseList\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"poseParentMatrix\" -sn \"ppmat\" -dt \"matrix\" -p \"poseList\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"poseMode\" -sn \"pmd\" -at \"long\" -p \"poseList\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"controlPoseAttributes\" -sn \"cpa\" -dt \"stringArray\" -p \"poseList\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"controlPoseValues\" -sn \"cpv\" -dt \"doubleArray\" -p \"poseList\" " + $solver + ";\n";
+	$cmd += "addAttr -ln \"controlPoseRotateOrder\" -sn \"cpro\" -at \"long\" -p \"poseList\" " + $solver + ";\n";
+	
+	if ($add)
+		eval $cmd;
+	
+	return $cmd;
+}
+
+
+global proc shapesPI_performRbfAttributeCheck( string $solver )
+{
+	//
+	// checks if the pose interpolator is compatible
+	//
+	if (shapesPI_hasLegacyRbf($solver))
+	{
+		shapesPI_transferRbfAttributes $solver;
+		br_displayMessage -info ("Updated RBF attributes on " + $solver + ".");
+	}
+	else if (!shapesPI_hasRbfAttributes($solver))
+	{
+		shapesPI_addRbfAttributes $solver 1;
+		br_displayMessage -info ("Added RBF attributes to " + $solver + ".");
+	}
+}
+
+
+global proc int shapesPI_hasLegacyRbf( string $solver )
+{
+	//
+	// checks if the pose interpolator
+	// contains the attributes from version 4.0
+	//
+	$solver = shapesCommon_getShapeNode($solver);
+	return (`attributeQuery -ex -n $solver "driveMatrix"`);
+}
+
+
+global proc int shapesPI_hasRbfAttributes( string $solver )
+{
+	//
+	// checks if the pose interpolator
+	// contains the weight driver rbf attributes
+	//
+	$solver = shapesCommon_getShapeNode($solver);
+	return (`attributeQuery -ex -n $solver "driverList"`);
+}
+
+
+global proc int shapesPI_isRbfCompatible( string $solver )
+{
+	//
+	// checks if the pose interpolator
+	// contains the weight driver rbf attributes
+	//
+	$solver = shapesCommon_getShapeNode($solver);
+	return (`attributeQuery -ex -n $solver "SHAPES_wd"`);
+}
+
+
+global proc shapesPI_transferRbfAttributes( string $solver )
+{
+	//
+	// transfer the pose data from version 4.0
+	// to version 4.1, which supports multiple drivers
+	//
+	
+	// add temporary attributes to hold the data
+	// so that the legacy attributes can be deleted
+	addAttr -ln "controlPoseTemp" -sn "cpt" -at "compound" -nc 3 -m -h 1 $solver;
+	addAttr -ln "controlPoseAttributesTemp" -sn "cpat" -dt "stringArray" -p "controlPoseTemp" $solver;
+	addAttr -ln "controlPoseValuesTemp" -sn "cpvt" -dt "doubleArray" -p "controlPoseTemp" $solver;
+	addAttr -ln "controlPoseRotateOrderTemp" -sn "cprot" -at "long" -p "controlPoseTemp" $solver;
+	addAttr -ln "poseMatrixTemp" -dt "matrix" -m -h 1 $solver;
+	
+	// store the pose data
+	int $axis = `getAttr ($solver + ".twistAxis")`;
+	string $loc[] = `listConnections -s 1 -d 0 ($solver + ".driveMatrix")`;
+	string $driver[] = `listConnections -s 1 -d 0 ($solver + ".twistNode")`;
+	string $controlNode[] = `listConnections -s 1 -d 0 ($solver + ".controlNode")`;
+	
+	int $matIds[] = `getAttr -mi ($solver + ".poseMatrix")`;
+	for ($i = 0; $i < size($matIds); $i ++)
+	{
+		float $mat[] = `getAttr ($solver + ".poseMatrix[" + $matIds[$i] + "]")`;
+		eval ("setAttr " + $solver + ".poseMatrixTemp[" + $matIds[$i] + "] -type \"matrix\" " + shapesArray_floatArrayToString($mat, " "));
+	}
+	
+	int $poseMode[];
+	int $modeIds[] = `getAttr -mi ($solver + ".poseMode")`;
+	for ($i = 0; $i < size($modeIds); $i ++)
+		$poseMode[$i] = `getAttr ($solver + ".poseMode[" + $modeIds[$i] + "]")`;
+	
+	int $poseIds[] = `getAttr -mi ($solver + ".controlPose")`;
+	for ($i = 0; $i < size($poseIds); $i ++)
+	{
+		string $attrs[] = `getAttr ($solver + ".controlPose[" + $poseIds[$i] + "].cpa")`;
+		eval ("setAttr " + $solver + ".controlPoseTemp[" + $poseIds[$i] + "].cpat -type \"stringArray\" " + size($attrs) + " " + stringArrayToString($attrs, " "));
+		float $values[] = `getAttr ($solver + ".controlPose[" + $poseIds[$i] + "].cpv")`;
+		eval ("setAttr " + $solver + ".controlPoseTemp[" + $poseIds[$i] + "].cpvt -type \"doubleArray\" " + size($values) + " " + shapesArray_floatArrayToString($values, " "));		
+		eval ("setAttr " + $solver + ".controlPoseTemp[" + $poseIds[$i] + "].cprot " + `getAttr ($solver + ".controlPose[" + $poseIds[$i] + "].cpro")`);
+	}
+	
+	// remove the legacy attributes and the locator
+	deleteAttr ($solver + ".readerMatrix");
+	deleteAttr ($solver + ".driveMatrix");
+	deleteAttr ($solver + ".restMatrix");
+	deleteAttr ($solver + ".poseMatrix");
+	deleteAttr ($solver + ".poseMode");
+	deleteAttr ($solver + ".controlNode");
+	deleteAttr ($solver + ".twistNode");
+	deleteAttr ($solver + ".twistAxis");
+	deleteAttr ($solver + ".controlPose");
+	delete $loc[0];
+	
+	// add the rbf attributes
+	shapesPI_addRbfAttributes $solver 1;
+	
+	// set the pose data
+	setAttr ($solver + ".twistAxis") $axis;
+	connectAttr -f ($driver[0] + ".worldMatrix[0]") ($solver + ".driverList[0].driverInput");
+	connectAttr -f ($controlNode[0] + ".message") ($solver + ".driverList[0].controlNode");
+	
+	for ($i = 0; $i < size($matIds); $i ++)
+	{
+		float $mat[] = `getAttr ($solver + ".poseMatrixTemp[" + $matIds[$i] + "]")`;
+		eval ("setAttr " + $solver + ".driverList[0].poseList[" + $matIds[$i] + "].poseMatrix -type \"matrix\" " + shapesArray_floatArrayToString($mat, " "));
+	}
+	
+	for ($i = 0; $i < size($modeIds); $i ++)
+		setAttr ($solver + ".driverList[0].poseList[" + $modeIds[$i] + "].poseMode") $poseMode[$i];
+	
+	for ($i = 0; $i < size($poseIds); $i ++)
+	{
+		string $attrs[] = `getAttr ($solver + ".controlPoseTemp[" + $poseIds[$i] + "].cpat")`;
+		eval ("setAttr " + $solver + ".driverList[0].poseList[" + $poseIds[$i] + "].cpa -type \"stringArray\" " + size($attrs) + " " + stringArrayToString($attrs, " "));
+		float $values[] = `getAttr ($solver + ".controlPoseTemp[" + $poseIds[$i] + "].cpvt")`;
+		eval ("setAttr " + $solver + ".driverList[0].poseList[" + $poseIds[$i] + "].cpv -type \"doubleArray\" " + size($values) + " " + shapesArray_floatArrayToString($values, " "));		
+		eval ("setAttr " + $solver + ".driverList[0].poseList[" + $poseIds[$i] + "].cpro " + `getAttr ($solver + ".controlPoseTemp[" + $poseIds[$i] + "].cprot")`);
+	}
+	
+	// delete the temporary attributes
+	deleteAttr ($solver + ".controlPoseTemp");
+	deleteAttr ($solver + ".poseMatrixTemp");
+}
+
+
+global proc shapesPI_mirrorPosesWithBehavior( string $source, string $destination )
+{
+	//
+	// mirror poses without mirrored behavior
+	//
+	
+	// get the shape nodes
+	string $sourceDriver = shapesCommon_getShapeNode($source);
+	string $mirrorDriver = shapesCommon_getShapeNode($destination);
+	
+	// connect the node to the manager
+	string $manager = shapesPI_getManager($sourceDriver);
+	shapesPI_connectToManager($mirrorDriver, $manager);
+	
+	// get the control node
+	string $control[] = `listConnections -s 1 -d 0 ($mirrorDriver + ".dl[0].controlNode")`;
+	if (size($control))
+		shapesPI_connectCustomControl $mirrorDriver $control[0];
+}
+
+
+global proc shapesPI_mirrorPosesWithNoBehavior( string $sourceDriver, string $mirrorDriver, string $mirroredList[])
+{
+	//
+	// mirror poses without mirrored behavior
+	//
+	
+	// get the shape nodes
+	$sourceDriver = shapesCommon_getShapeNode($sourceDriver);
+	$mirrorDriver = shapesCommon_getShapeNode($mirrorDriver);
+	
+	// get the mirrored driving joint
+	string $mirrorNode[] = `listConnections -s 1 -d 0 ($mirrorDriver + ".driver[0].driverMatrix")`;
+	
+	int $twistAxis = `getAttr ($mirrorDriver + ".driver[0].driverTwistAxis")`;
+	
+	// clear the driver data
+	int $ids[] = `getAttr -mi ($mirrorDriver + ".driver")`;
+	for ($id in $ids)
+		removeMultiInstance -b 1 ($mirrorDriver + ".driver[" + $id + "]");
+	
+	//
+	// save and clear the pose data
+	//
+	clear $ids;
+	
+	int $independent[];
+	float $rotFalloff[];
+	float $transFalloff[];
+	int $type[];
+	float $gaussFalloff[];
+	int $enabled[];
+	
+	$ids = `getAttr -mi ($mirrorDriver + ".pose")`;
+	for ($id in $ids)
+	{
+		$independent[size($independent)] = `getAttr ($mirrorDriver + ".pose[" + $id + "].isIndependent")`;
+		$rotFalloff[size($rotFalloff)] = `getAttr ($mirrorDriver + ".pose[" + $id + "].poseRotationFalloff")`;
+		$transFalloff[size($transFalloff)] = `getAttr ($mirrorDriver + ".pose[" + $id + "].poseTranslationFalloff")`;
+		$type[size($type)] = `getAttr ($mirrorDriver + ".pose[" + $id + "].poseType")`;
+		$gaussFalloff[size($gaussFalloff)] = `getAttr ($mirrorDriver + ".pose[" + $id + "].poseFalloff")`;
+		$enabled[size($enabled)] = `getAttr ($mirrorDriver + ".pose[" + $id + "].isEnabled")`;
+		
+		removeMultiInstance -b 1 ($mirrorDriver + ".pose[" + $id + "]");
+	}
+	
+	string $sel[] = `ls -sl`;
+	
+	//
+	// prepare for mirroring
+	//
+	
+	// duplicate the driving node
+	string $mirrorNodeTemp[] = `duplicate -rc -rr $mirrorNode[0]`;
+	delete (`listRelatives -c $mirrorNodeTemp[0]`);
+	string $attrs[] = {"translateX", "translateY", "translateZ", "rotateX", "rotateY", "rotateZ", "scaleX", "scaleY", "scaleZ"};
+	for ($a in $attrs)
+		setAttr -l 0 ($mirrorNodeTemp[0] + "." + $a);
+	// connect it to the pose interpolator for the time of the setup
+	shapesPI_mirrorConnectDriver $mirrorNodeTemp[0] $mirrorDriver;
+	
+	// get the control node
+	string $control[] = `listConnections -s 1 -d 0 ($mirrorDriver + ".controlNode")`;
+	// create the neutral poses
+	if (size($control))
+		select -r $control[0];
+	else
+		select -r $control[0];
+	createNeutralPoses $mirrorDriver;
+	
+	string $axis = shapesMirror_getAxisString();
+	
+	//
+	// create the temp setup for recreating the poses
+	//
+	
+	// create a joint to serve as the root for the joint mirroring
+	select -cl;
+	string $root = `joint`;
+	// for creating the source poses create a joint and
+	// match it to the the original driving joint;
+	// we cannot duplicate the original joint because this will create
+	// unwanted connections to the pose interpolator because of a bug and results in a crash;
+	// parent it to the root joint
+	string $sourceNode[] = `listConnections -s 1 -d 0 ($sourceDriver + ".driver[0].driverMatrix")`;
+	select -cl;
+	string $sourceTemp = `joint`;
+	delete (`pointConstraint $sourceNode[0] $sourceTemp`);
+	delete (`orientConstraint $sourceNode[0] $sourceTemp`);
+	parent $sourceTemp $root;
+	int $rotOrder = `getAttr ($sourceNode[0] + ".rotateOrder")`;
+	setAttr ($sourceTemp + ".rotateOrder");
+	float $orient[] = `getAttr ($sourceNode[0] + ".jointOrient")`;
+	setAttr ($sourceTemp + ".jointOrient") -type double3 $orient[0] $orient[1] $orient[2];
+	
+	//
+	// mirror the poses
+	//
+	
+	// go through each pose and recreate it on the temp source driver joint;
+	// then mirror the joint and match the temp driver to it;
+	// use this to add the pose
+	for ($i = 3; $i < size($ids); $i ++)
+	{
+		float $mat[] = `getAttr ($sourceDriver + ".poseList[" + $ids[$i] + "].poseMatrix")`;
+		eval("xform -m " + shapesArray_floatArrayToString($mat, " ") + " " + $sourceTemp);
+		
+		// apply point constraint because applying the matrix moves the joint as well
+		delete (`pointConstraint $sourceNode $sourceTemp`);
+		
+		string $mirrorTemp[];
+		if ($axis == "x")
+			$mirrorTemp = `mirrorJoint -myz -mb $sourceTemp`;
+		else if ($axis == "y")
+			$mirrorTemp = `mirrorJoint -mxz -mb $sourceTemp`;
+		else if ($axis == "z")
+			$mirrorTemp = `mirrorJoint -mxy -mb $sourceTemp`;
+		delete (`orientConstraint $mirrorTemp $mirrorNodeTemp[0]`);
+		delete (`pointConstraint $mirrorTemp $mirrorNodeTemp[0]`);
+		
+		poseInterpolator -e -addPose $mirroredList[$i - 3] $mirrorDriver;
+	}
+	
+	// re-connect the mirror driver to the pose interpolator
+	shapesPI_mirrorConnectDriver $mirrorNode[0] $mirrorDriver;
+	
+	// delete the temp joints
+	delete $root;
+	delete $mirrorNodeTemp[0];
+	
+	if (size($control))
+		shapesPI_connectCustomControl $mirrorDriver $control[0];
+	
+	// apply the previous settings
+	setAttr ($mirrorDriver + ".driver[0].driverTwistAxis") $twistAxis;
+	// get the new ids because if the source node has missing ids in case
+	// one or more shapes have been removed the mirrored node has continuous ids
+	// due to how it has been created
+	$ids = `getAttr -mi ($mirrorDriver + ".pose")`;
+	for ($i = 0; $i < size($ids); $i ++)
+	{
+		setAttr ($mirrorDriver + ".pose[" + $ids[$i] + "].isIndependent") $independent[$i];
+		setAttr ($mirrorDriver + ".pose[" + $ids[$i] + "].poseRotationFalloff") $rotFalloff[$i];
+		// catch, because the attribute cannot be set to 0 even though it starts out as 0
+		catchQuiet(`setAttr ($mirrorDriver + ".pose[" + $ids[$i] + "].poseTranslationFalloff") $transFalloff[$i]`);
+		setAttr ($mirrorDriver + ".pose[" + $ids[$i] + "].poseType") $type[$i];
+		setAttr ($mirrorDriver + ".pose[" + $ids[$i] + "].poseFalloff") $gaussFalloff[$i];
+		setAttr ($mirrorDriver + ".pose[" + $ids[$i] + "].isEnabled") $enabled[$i];
+	}
+	
+	// connect the node to the manager
+	string $manager = shapesPI_getManager($sourceDriver);
+	shapesPI_connectToManager($mirrorDriver, $manager);
+	
+	if (size($sel))
+		select -r $sel;
+}
+
+
+global proc string shapesPI_getManager( string $node )
+{
+	//
+	// find the manager node
+	//
+	string $manager[] = `listConnections -s 0 -d 1 ($node + ".midLayerParent")`;
+	return $manager[0];
+}
+
+
+global proc shapesPI_connectToManager( string $node, string $manager )
+{
+	//
+	// connect the pose interpolator to the manager
+	//
+	int $index = shapesCommon_findEmptyMultiIndex($manager + ".tppr");
+	connectAttr ($node + ".midLayerParent") ($manager + ".tppr[" + $index + "]");
+}
+
+
+global proc SHAPES_poseInterpolator(){}

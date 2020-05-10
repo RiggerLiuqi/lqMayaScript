@@ -1,0 +1,7 @@
+fit: joint
+group: Squash
+rml: Middle
+field: Up
+layer: Squash
+rig: squash
+fName: HeadSquashMiddleUpJoint

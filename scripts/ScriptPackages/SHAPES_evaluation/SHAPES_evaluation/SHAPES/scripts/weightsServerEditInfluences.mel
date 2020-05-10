@@ -1,0 +1,723 @@
+// ----------------------------------------------------------------------------------------------
+//
+// weightsServerEditInfluences.mel
+//
+// editor for the weightsServer node
+//
+// Ingo Clemens
+// www.braverabbit.com
+//
+// copyright brave rabbit, Ingo Clemens 2016-2018
+//
+// weightsServer version: 1.7
+//
+// ----------------------------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------------------------
+//
+// THE SOFTWARE PRODUCT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR
+// IMPLIED, INCLUDING, BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NON-INFRINGEMENT OF THIRD-PARTY RIGHTS. THE ENTIRE RISK AS TO THE QUALITY AND
+// PERFORMANCE OF THE SOFTWARE PRODUCT IS WITH YOU.
+// NEITHER BRAVE RABBIT NOR ITS SUPPLIERS WARRANT THAT THE FUNCTIONS CONTAINED IN THE SOFTWARE
+// PRODUCT WILL MEET YOUR REQUIREMENTS OR THAT THE OPERATION OF THE SOFTWARE PRODUCT WILL BE
+// UNINTERRUPTED OR ERROR-FREE. BRAVE RABBIT IS NOT OBLIGATED TO PROVIDE ANY UPDATES TO THE
+// SOFTWARE.
+// IN NO EVENT SHALL THE AUTHOR OF THIS SOFTWARE PRODUCT BE LIABLE FOR ANY SPECIAL, CONSEQUENTIAL,
+// INCIDENTAL, DIRECT OR INDIRECT DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR
+// LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, FOR PERSONAL INJURY, LOSS OF BUSINESS
+// INFORMATION, OR ANY OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR INABILITY TO USE THIS
+// PRODUCT, EVEN IF THE AUTHOR OF THIS SOFTWARE PRODUCT IS AWARE OF THE POSSIBILITY OF SUCH
+// DAMAGES AND KNOWN DEFECTS, ANY CLAIM BY A THIRD PARTY AND EVEN IF THE REMEDY FAILS OF ITS
+// ESSENTIAL PURPOSE.
+//
+// ----------------------------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------------------------
+//
+// run by executing the following command:
+//
+// weightsServerEditInfluences;
+//
+// ----------------------------------------------------------------------------------------------
+
+
+global proc weightsServerEditInfluencesUI()
+{
+	//
+	// build the window
+	//
+	if (`window -ex weightsServerEditInfluencesWin`)
+		deleteUI weightsServerEditInfluencesWin;
+	
+	window -t "Edit WeightsServer Influences" -wh 720 450 weightsServerEditInfluencesWin;
+	
+	string $mainForm = `formLayout`;
+	
+	string $mainScroll = `scrollLayout -cr 1`;
+	
+	string $mainLayout = `columnLayout -adj 1`;
+		
+		//-------------------
+		// weight driver node
+		//-------------------
+		
+		string $nodeOptionForm = `formLayout`;
+			string $nodeLabel = `text -l "Weights Server" -al "left" -w 90`;
+			optionMenu -cc weightsServerGetData wsUI_weightsServerNodeOption;
+				menuItem -l "None";
+			popupMenu;
+				menuItem -l "Select Weights Server" -c "if (weightsServerGetSelectedNodeOption() != \"\") select -r (weightsServerGetSelectedNodeOption());";
+				menuItem -d 1;
+				string $deleteCmd1 = "if (weightsServerGetSelectedNodeOption() != \"\") { select -r (weightsServerGetSelectedNodeOption()); brDeleteWeightsServer 1; weightsServerRefreshUI;}";
+				string $deleteCmd2 = "if (weightsServerGetSelectedNodeOption() != \"\") { select -r (weightsServerGetSelectedNodeOption()); brDeleteWeightsServer 0; weightsServerRefreshUI;}";
+				menuItem -l "Delete Weights Server" -c $deleteCmd1;
+				menuItem -l "Delete Weights Server And Keep Weights" -c $deleteCmd2;
+			string $ann = "Select a deformer to be controlled or create a weightsServer node without connections";
+			string $createButton = `button -l "Create" -w 60 -c weightsServerCreateWeightsServer -ann $ann`;
+			string $refreshButton = `button -l "Refresh" -w 60 -c weightsServerRefreshUI`;
+			
+			formLayout	-e
+						
+						-af $nodeLabel "top" 7
+						-af $nodeLabel "left" 5
+						-af wsUI_weightsServerNodeOption "top" 5
+						-af $createButton "top" 3
+						-af $refreshButton "top" 3
+						-af $refreshButton "right" 5
+						
+						-ac wsUI_weightsServerNodeOption "left" 3 $nodeLabel
+						-ac wsUI_weightsServerNodeOption "right" 15 $createButton
+						-ac $createButton "right" 10 $refreshButton
+						
+						$nodeOptionForm;
+		setParent $mainLayout;
+		
+		separator -st "none" -h 5;
+		
+		int $state = `optionVar -q weightsServerDeformerFrameCollapse`;
+		string $deformerFrame = `frameLayout -l "Deformer" -li 3 -cll 1 -cl $state -mw 5 -mh 5`;
+			columnLayout -adj 1 wsUI_deformerDataLayout;
+			 	;
+		setParent $mainLayout;
+		
+		$state = `optionVar -q weightsServerGlobalFrameCollapse`;
+		string $globalFrame = `frameLayout -l "Global Attributes" -li 3 -cll 1 -cl $state -mw 5 -mh 5`;
+			columnLayout -adj 1 wsUI_globalsLayout;
+			 	;
+		setParent $mainLayout;
+		
+		$state = `optionVar -q weightsServerInfluenceFrameCollapse`;
+		string $influenceFrame = `frameLayout -l "Influence List" -li 3 -cll 1 -cl $state -mw 5 -mh 5`;
+			columnLayout -adj 1 wsUI_influenceDataLayout;
+			 	;
+		setParent $mainLayout;
+	
+	setParent $mainForm;
+	
+	string $closeButton = `button -l "Close" -c weightsServerCloseUI`;
+	
+	formLayout	-e
+				
+				-af $mainScroll "top" 0
+				-af $mainScroll "left" 0
+				-af $mainScroll "right" 0
+				-af $closeButton "left" 0
+				-af $closeButton "right" 0
+				-af $closeButton "bottom" 5
+				
+				-ac $mainScroll "bottom" 10 $closeButton
+	
+				$mainForm;
+		
+	frameLayout -e -cc ("optionVar -iv weightsServerDeformerFrameCollapse (`frameLayout -q -cl " + $deformerFrame + "`)") $deformerFrame;
+	frameLayout -e -ec ("optionVar -iv weightsServerDeformerFrameCollapse (`frameLayout -q -cl " + $deformerFrame + "`)") $deformerFrame;
+	frameLayout -e -cc ("optionVar -iv weightsServerGlobalFrameCollapse (`frameLayout -q -cl " + $globalFrame + "`)") $globalFrame;
+	frameLayout -e -ec ("optionVar -iv weightsServerGlobalFrameCollapse (`frameLayout -q -cl " + $globalFrame + "`)") $globalFrame;
+	frameLayout -e -cc ("optionVar -iv weightsServerInfluenceFrameCollapse (`frameLayout -q -cl " + $influenceFrame + "`)") $influenceFrame;
+	frameLayout -e -ec ("optionVar -iv weightsServerInfluenceFrameCollapse (`frameLayout -q -cl " + $influenceFrame + "`)") $influenceFrame;
+	
+	showWindow weightsServerEditInfluencesWin;
+	
+	weightsServerBuildMenu;
+}
+
+// --------------------------------------------------------------------------------------------------
+// cleanup
+// --------------------------------------------------------------------------------------------------
+
+global proc weightsServerCloseUI()
+{
+	//
+	// close the window
+	//
+	if (`window -ex weightsServerEditInfluencesWin`)
+		deleteUI weightsServerEditInfluencesWin;
+}
+
+global proc weightsServerClearAll()
+{
+	//
+	// clears all elements
+	//
+	weightsServerClearDeformerItems;
+	weightsServerClearGlobalItems;
+	weightsServerClearInfluenceItems;
+}
+
+global proc weightsServerClearDeformerItems()
+{
+	//
+	// removes all deformer items
+	//
+	string $items[] = `columnLayout -q -ca wsUI_deformerDataLayout`;
+	for ($i in $items)
+		deleteUI $i;
+}
+
+global proc weightsServerClearGlobalItems()
+{
+	//
+	// removes all deformer items
+	//
+	string $items[] = `columnLayout -q -ca wsUI_globalsLayout`;
+	for ($i in $items)
+		deleteUI $i;
+}
+
+global proc weightsServerClearInfluenceItems()
+{
+	//
+	// removes all deformer items
+	//
+	string $items[] = `columnLayout -q -ca wsUI_influenceDataLayout`;
+	for ($i in $items)
+		deleteUI $i;
+}
+
+global proc weightsServerRefreshUI()
+{
+	//
+	// updates the ui
+	//
+	weightsServerBuildMenu;
+	weightsServerClearAll;
+}
+
+// --------------------------------------------------------------------------------------------------
+// weights server option menu
+// --------------------------------------------------------------------------------------------------
+
+global proc weightsServerBuildMenu()
+{	
+	//
+	// build the option menu for the solver
+	// and collect all weight driver nodes in the scene
+	//
+	if (`optionMenu -ex wsUI_weightsServerNodeOption`)
+	{
+		string $items[] = `optionMenu -q -ill wsUI_weightsServerNodeOption`;
+		for ($c in $items)
+			deleteUI $c;
+	}
+	
+	menuItem -l "Select" -p wsUI_weightsServerNodeOption;
+	
+	string $nodes[] = `ls -type weightsServer`;
+	for ($n in $nodes)
+		menuItem -l $n -p wsUI_weightsServerNodeOption;
+	
+	if (!size($nodes))
+		weightsServerClearAll;
+}
+
+global proc string weightsServerGetSelectedNodeOption()
+{
+	//
+	// returns the name of the selected node option
+	//
+	string $node = `optionMenu -q -v wsUI_weightsServerNodeOption`;
+	if ($node == "Select")
+		$node = "";
+	return $node;
+}
+
+// --------------------------------------------------------------------------------------------------
+// get the data from an existing setup
+// --------------------------------------------------------------------------------------------------
+
+global proc weightsServerGetData()
+{
+	//
+	// gets the deformer for the node and gathers the
+	// influences and values to populate the ui
+	//
+	weightsServerClearAll;
+	
+	string $node = weightsServerGetSelectedNodeOption();
+	if ($node == "")
+		return;
+	
+	weightsServerGetDeformers;
+	weightsServerCreateGlobalControls $node;
+	weightsServerGetInfluences;
+}
+
+global proc weightsServerGetDeformers()
+{
+	//
+	// get the weights server deformers and
+	// generate the list items
+	//
+	weightsServerClearDeformerItems;
+	
+	string $node = weightsServerGetSelectedNodeOption();
+	if ($node == "")
+		return;
+	
+	int $outIds[] = `getAttr -mi ($node + ".wl")`;
+	for ($id in $outIds)
+		weightsServerCreateDeformerItem $node $id;
+	
+	weightsServerCreateAddDeformerButton;
+}
+
+global proc weightsServerCreateDeformerItem( string $node, int $index )
+{
+	//
+	// creates a deformer list item
+	//
+	
+	// get the deformer name from the given output attribute;
+	string $deformer;
+	int $targetId = -1;
+	string $targetName = "";
+	
+	string $conn[] = `listConnections -s 0 -d 1 -p 1 ($node + ".wl[" + $index + "].w")`;
+	if (!size($conn))
+		return;
+	
+	string $items[] = stringToStringArray($conn[0], ".");
+	$deformer = $items[0];
+	if (`gmatch $items[size($items) - 2] "*inputTargetGroup*"`)
+	{
+		$targetId = `match "[0-9]+" $items[size($items) - 2]`;
+		string $shapes[] = `aliasAttr -q $deformer`;
+		for ($i = 0; $i < size($shapes); $i ++)
+		{
+			if (`match "[0-9]+" $shapes[$i + 1]` == $targetId)
+			{
+				$targetName = $shapes[$i];
+				break;
+			}
+		}
+	}
+	
+	// create the list item
+	setParent wsUI_deformerDataLayout;
+	
+	string $form = `formLayout`;
+	
+	string $lid = `text -l ("Output " + $index + ":") -al "left"`;
+	string $l1 = `text -l $deformer -al "left"`;
+	popupMenu;
+		menuItem -l "Select" -c ("select -r " + $deformer);
+	
+	string $label2 = "";
+	string $label3 = "";
+	string $label4 = "";
+	string $label5 = "";
+	if ($targetId >= 0)
+	{
+		$label2 = "Target Name: ";
+		$label3 = $targetName;
+		$label4 = "Index: ";
+		$label5 = $targetId;
+	}
+	string $l2 = `text -l $label2 -al "left"`;
+	string $l3 = `text -l $label3 -al "left"`;
+	string $l4 = `text -l $label4 -al "left"`;
+	string $l5 = `text -l $label5 -al "left"`;
+	string $btnCmd1 = "select -r " + $deformer + "; brRemoveWeightsServerDeformer 1; weightsServerGetDeformers;";
+	string $btnCmd2 = "select -r " + $deformer + "; brRemoveWeightsServerDeformer 0; weightsServerGetDeformers;";
+	string $btn1 = `iconTextButton -st "iconOnly" -i "smallTrash.png" -c $btnCmd1 -ann "Remove the deformer from the weightsServer node and reset the deformer weights"`;
+	string $btn2 = `iconTextButton -st "iconAndTextHorizontal" -i "smallTrash.png" -l "Keep Weights" -c $btnCmd2 -ann "Remove the deformer from the weightsServer node and keep the deformer weights"`;
+	
+	string $sep = `separator -st "in" -hr 0 -h 25`;
+	
+	formLayout	-e
+				
+				-af $lid "left" 0
+				-af $lid "top" 4
+				-af $btn2 "right" 0
+				-af $l1 "top" 4
+				-af $l2 "top" 4
+				-af $l3 "top" 4
+				-af $l4 "top" 4
+				-af $l5 "top" 4
+				-af $sep "top" 0
+				
+				-ac $l1 "left" 10 $lid
+				-ac $l2 "left" 0 $l1
+				-ac $l3 "left" 0 $l2
+				-ac $l3 "right" 0 $l4
+				-ac $l4 "right" 0 $l5
+				-ac $l5 "right" 25 $btn1
+				-ac $btn1 "right" 5 $sep
+				-ac $sep "right" 5 $btn2
+				
+				-ap $l1 "right" 0 30
+				
+				$form;
+	
+	setParent ..;
+}
+
+global proc weightsServerCreateAddDeformerButton()
+{
+	//
+	// adds the button for adding one or more deformer
+	// to the weights server node
+	//
+	setParent wsUI_deformerDataLayout;
+	
+	string $ann = "Select the deformers to be added or select the blend shape target from the channel box which should be controlled.";
+	
+	columnLayout;
+		separator -st "none" -h 10;
+		button -l "Add Deformer From Selection" -ann $ann -c "weightsServerPerformAddDeformer; weightsServerGetDeformers;";
+	
+	setParent ..;
+}
+
+global proc weightsServerCreateGlobalControls( string $node )
+{
+	//
+	// creates the global weights server controls
+	//
+	setParent wsUI_globalsLayout;
+	
+	string $form = `formLayout`;
+	
+	string $radius = `floatSliderGrp -l "Global Radius" -f 1 -min 0 -max 50 -pre 3 -cw 2 70`;
+	string $scale = `floatSliderGrp -l "Global Scale" -f 1 -min 0 -max 1 -pre 3 -cw 2 70`;
+	string $infScale = `floatSliderGrp -l "Global Influence Scale" -f 1 -min 0 -max 1 -pre 3 -cw 2 70`;
+	
+	formLayout	-e
+				
+				-af $radius "left" 0
+				-af $radius "top" 0
+				-af $radius "right" 0
+				-af $scale "left" 0
+				-af $scale "right" 0
+				-af $infScale "left" 0
+				-af $infScale "right" 0
+				
+				-ac $scale "top" 5 $radius
+				-ac $infScale "top" 5 $scale
+				
+				$form;
+	
+	setParent ..;
+	
+	connectControl $radius ($node + ".globalRadius");
+	connectControl $scale ($node + ".globalScale");
+	connectControl $infScale ($node + ".globalInfluenceScale");
+}
+
+global proc weightsServerGetInfluences()
+{
+	//
+	// get the weights server influences and
+	// generate the list items
+	//
+	weightsServerClearInfluenceItems;
+	
+	string $node = weightsServerGetSelectedNodeOption();
+	if ($node == "")
+		return;
+	
+	int $infIds[] = `getAttr -mi ($node + ".influence")`;
+	for ($id in $infIds)
+		weightsServerCreateInfluenceItem $node $id;
+	
+	weightsServerCreateAddInfluenceButton;
+}
+
+global proc weightsServerCreateInfluenceItem( string $node, int $index )
+{
+	//
+	// creates a influence list item
+	//
+	
+	// get the deformer name from the given output attribute;
+	string $deformer;
+	int $targetId;
+	string $targetName;
+	
+	string $conn[] = `listConnections -s 1 -d 0 ($node + ".influence[" + $index + "].matrix")`;
+	if (!size($conn))
+		return;
+	
+	string $influence = $conn[0];
+	float $radius = `getAttr ($node + ".influence[" + $index + "].radius")`;
+	float $scale = `getAttr ($node + ".influence[" + $index + "].scale")`;
+	int $active = `getAttr ($node + ".influence[" + $index + "].active")`;
+	int $world = `getAttr ($node + ".influence[" + $index + "].worldSpace")`;
+	int $useShape = `getAttr ($node + ".influence[" + $index + "].useShape")`;
+	
+	// create the list item
+	setParent wsUI_influenceDataLayout;
+	
+	string $form = `formLayout`;
+	
+	string $lid = `text -l ("Influence " + $index + ":") -al "left"`;
+	string $nameField = `textField -tx $influence -ann "Edit to rename the influence. Right-click to select."`;
+	popupMenu;
+		menuItem -l "Select" -c ("select -r " + $influence);
+	
+	string $radiusLabel = `text -l "Radius" -al "left" -ann "Individual radius value for the influence. Use -1 to use the global radius instead."`;
+	string $radiusField = `floatField -pre 3 -w 70 -ann "Individual radius value for the influence. Use -1 to use the global radius instead."`;
+	string $scaleLabel = `text -l "Scale" -al "left"`;
+	string $scaleField = `floatField -pre 3 -w 70`;
+	string $activeCheck = `checkBox -l "" -ann "Active state of the influence"`;
+	string $worldLabel = `text -l "World" -al "left" -ann "Use the world space position of the influence"`;
+	string $worldCheck = `checkBox -l "" -ann "Use the world space position of the influence"`;
+	string $useShapeLabel = `text -l "Shape" -al "left" -ann "Use the shape node as the influence instead of the transform"`;
+	string $useShapeCheck = `checkBox -l "" -ann "Use the shape node as the influence instead of the transform"`;
+	string $updateBtn = `iconTextButton -st "iconOnly" -i "relative.png" -c ("weightsServerSetInfluenceRest " + $influence) -ann "Set the current position as the rest position for the influence"`;
+	string $btnCmd = "select -r " + $influence + "; brRemoveWeightsServerInfluence; weightsServerGetInfluences;";
+	string $btn = `iconTextButton -st "iconOnly" -i "smallTrash.png" -c $btnCmd -ann "Remove the influence from the weightsServer node"`;
+	
+	formLayout	-e
+				
+				-af $activeCheck "left" 0
+				-af $activeCheck "top" 4
+				-af $lid "top" 4
+				-af $btn "right" 0
+				-af $nameField "top" 0
+				-af $radiusLabel "top" 4
+				-af $radiusField "top" 1
+				-af $scaleLabel "top" 4
+				-af $scaleField "top" 1
+				-af $worldLabel "top" 4
+				-af $worldCheck "top" 4
+				-af $useShapeLabel "top" 4
+				-af $useShapeCheck "top" 4
+				-af $updateBtn "top" 0
+				
+				-ac $lid "left" 10 $activeCheck
+				-ac $nameField "left" 10 $lid
+				-ac $nameField "right" 15 $radiusLabel
+				-ac $radiusLabel "right" 5 $radiusField
+				-ac $radiusField "right" 15 $scaleLabel
+				-ac $scaleLabel "right" 5 $scaleField
+				-ac $scaleField "right" 15 $worldLabel
+				-ac $worldLabel "right"5 $worldCheck
+				-ac $worldCheck "right" 15 $useShapeLabel
+				-ac $useShapeLabel "right" 5 $useShapeCheck
+				-ac $useShapeCheck "right" 20 $updateBtn
+				-ac $updateBtn "right" 15 $btn
+				
+				$form;
+	
+	setParent ..;
+	
+	connectControl $radiusField ($node + ".influence[" + $index + "].radius");
+	connectControl $scaleField ($node + ".influence[" + $index + "].scale");
+	connectControl $activeCheck ($node + ".influence[" + $index + "].active");
+	connectControl $worldCheck ($node + ".influence[" + $index + "].worldSpace");
+	connectControl $useShapeCheck ($node + ".influence[" + $index + "].useShape");
+	
+	string $cmd = "weightsServerRenameInfluence " + $nameField + " " + $influence;
+	textField -e -cc $cmd -ec $cmd $nameField;
+}
+
+global proc weightsServerCreateAddInfluenceButton()
+{
+	//
+	// adds the button for adding one or more influences
+	// to the weights server node
+	//
+	setParent wsUI_influenceDataLayout;
+	
+	string $ann = "Select one or more nodes to be added as influences.";
+	
+	columnLayout;
+		separator -st "none" -h 10;
+		button -l "Add Influence From Selection" -ann $ann -c "weightsServerPerformAddInfluence; weightsServerGetInfluences;";
+	
+	setParent ..;
+}
+
+global proc weightsServerRenameInfluence( string $nameField, string $oldName )
+{
+	//
+	// renames the influence through the influence name field
+	//
+	string $newName = `textField -q -tx $nameField`;
+	$newName = `rename $oldName $newName`;
+	
+	string $cmd = "weightsServerRenameInfluence " + $nameField + " " + $newName;
+	textField -e -tx $newName -cc $cmd -ec $cmd $nameField;
+}
+
+// --------------------------------------------------------------------------------------------------
+// actions
+// --------------------------------------------------------------------------------------------------
+
+global proc weightsServerCreateWeightsServer()
+{
+	//
+	// creates a new unconnected weights server node
+	//
+	string $deformer;
+	string $createUnconnected = 0;
+	
+	string $sel[] = `ls -sl`;
+	if (!size($sel))
+		$createUnconnected = 1;
+	else
+	{
+		$deformer = $sel[0];
+		if (`nodeType $deformer` != "blendShape" && !`attributeQuery -ex -n $deformer "weightList"`)
+			$createUnconnected = 1;
+	}
+	
+	string $node;
+	if ($createUnconnected)
+		$node = `createNode weightsServer`;
+	else
+	{
+		int $index = 0;
+		if (`nodeType $deformer` == "blendShape")
+			$index = weightsServerGetBlendShapeTargetIndex($deformer);
+		select -r $deformer;
+		$node = brCreateWeightsServer($index);
+	}
+	
+	weightsServerRefreshUI;
+	
+	weightsServerSelectOptionByName $node;
+}
+
+global proc weightsServerSelectOptionByName( string $node )
+{
+	//
+	// select the given node name in the option menu
+	// and refresh the ui
+	//
+	string $items[] = `optionMenu -q -ill wsUI_weightsServerNodeOption`;
+	int $index = -1;
+	for ($i = 0; $i < size($items); $i ++)
+	{
+		if (`menuItem -q -l $items[$i]` == $node)
+		{
+			$index = $i + 1;
+			break;
+		}
+	}
+	optionMenu -e -sl $index wsUI_weightsServerNodeOption;
+	
+	weightsServerGetData;
+}
+
+global proc weightsServerPerformAddDeformer()
+{
+	//
+	// checks the channel box selection in case of a
+	// blend shape deformer and adds the deformer
+	// selection to the weights server node
+	//
+	string $node = weightsServerGetSelectedNodeOption();
+	if ($node == "")
+		return;
+	
+	string $sel[] = `ls -sl`;
+	if (!size($sel))
+		return;
+	
+	int $index = 0;
+	if (`nodeType $sel[0]` == "blendShape")
+		$index = weightsServerGetBlendShapeTargetIndex($sel[0]);
+	
+	stringArrayInsertAtIndex(0, $sel, $node);
+	select -r $sel;
+	
+	brAddWeightsServerDeformer $index;
+}
+
+global proc int weightsServerGetBlendShapeTargetIndex( string $bsNode )
+{
+	//
+	// returns the index of the selected blend shape target
+	// in the channel box
+	//
+	global string $gChannelBoxName;
+	
+	int $index = 0;
+	string $attr[] = `channelBox -q -sma $gChannelBoxName`;
+	string $shapes[] = `aliasAttr -q $bsNode`;
+	for ($i = 0; $i < size($shapes); $i ++)
+	{
+		if ($shapes[$i] == $attr[0])
+		{
+			$index = `match "[0-9]+" $shapes[$i + 1]`;
+			break;
+		}
+	}
+	return $index;
+}
+
+global proc weightsServerPerformAddInfluence()
+{
+	//
+	// adds the selection as influences
+	// to the weights server node
+	//
+	string $node = weightsServerGetSelectedNodeOption();
+	if ($node == "")
+		return;
+	
+	string $sel[] = `ls -sl`;
+	if (!size($sel))
+		return;
+	
+	$sel[size($sel)] = $node;
+	select -r $sel;
+	
+	brAddWeightsServerInfluence;
+}
+
+global proc weightsServerSetInfluenceRest( string $influence )
+{
+	//
+	// sets the current influence position
+	// as the rest position
+	//
+	string $conn[] = `listConnections -s 0 -d 1 -p 1 -type "weightsServer" ($influence + ".worldMatrix[0]")`;
+	if (size($conn))
+	{
+		string $items[] = stringToStringArray($conn[0], ".");
+		$items[size($items) - 1] = "restParentMatrix";
+		string $attr = stringArrayToString($items, ".");
+		connectAttr -f ($influence + ".parentMatrix[0]") $attr;
+		refresh;
+		disconnectAttr ($influence + ".parentMatrix[0]") $attr;
+	}
+}
+
+// --------------------------------------------------------------------------------------------------
+// entry
+// --------------------------------------------------------------------------------------------------
+
+global proc weightsServerEditInfluences()
+{
+	//
+	// initialization
+	//
+	if (!`pluginInfo -q -l weightsServer`)
+		loadPlugin weightsServer;
+	
+	weightsServerEditInfluencesUI;
+}

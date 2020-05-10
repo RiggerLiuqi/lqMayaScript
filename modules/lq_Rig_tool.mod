@@ -1,0 +1,1 @@
++ lq_rig_tools 1.0 F:\lqMayaScript

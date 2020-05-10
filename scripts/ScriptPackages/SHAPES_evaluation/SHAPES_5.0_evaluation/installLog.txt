@@ -1,0 +1,4 @@
+Created folder F:/lqMayaScript/scripts/ScriptPackages/SHAPES_evaluation/SHAPES_5.0_evaluation/SHAPES
+Created module file F:/lqMayaScript/scripts/ScriptPackages/SHAPES_evaluation/SHAPES_5.0_evaluation/SHAPES.mod
+Created module in F:/lqMayaScript/modules/SHAPES
+Copied module file to C:/Users/A/Documents/maya/2017/modules/

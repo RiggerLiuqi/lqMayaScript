@@ -1,0 +1,77 @@
+// --------------------------------------------------------------------------------------------------
+//
+// SHAPES
+//
+// blend shape editing tool for Maya
+//
+// required plugins:
+//   SHAPESTools
+//
+// Ingo Clemens
+// www.braverabbit.com
+//
+// copyright brave rabbit, Ingo Clemens 2014-2018
+//
+// --------------------------------------------------------------------------------------------------
+
+// --------------------------------------------------------------------------------------------------
+//
+// THE SOFTWARE PRODUCT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR
+// IMPLIED, INCLUDING, BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NON-INFRINGEMENT OF THIRD-PARTY RIGHTS. THE ENTIRE RISK AS TO THE QUALITY AND
+// PERFORMANCE OF THE SOFTWARE PRODUCT IS WITH YOU.
+// NEITHER BRAVE RABBIT NOR ITS SUPPLIERS WARRANT THAT THE FUNCTIONS CONTAINED IN THE SOFTWARE
+// PRODUCT WILL MEET YOUR REQUIREMENTS OR THAT THE OPERATION OF THE SOFTWARE PRODUCT WILL BE
+// UNINTERRUPTED OR ERROR-FREE. BRAVE RABBIT IS NOT OBLIGATED TO PROVIDE ANY UPDATES TO THE
+// SOFTWARE.
+// IN NO EVENT SHALL THE AUTHOR OF THIS SOFTWARE PRODUCT BE LIABLE FOR ANY SPECIAL, CONSEQUENTIAL,
+// INCIDENTAL, DIRECT OR INDIRECT DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR
+// LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, FOR PERSONAL INJURY, LOSS OF BUSINESS
+// INFORMATION, OR ANY OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR INABILITY TO USE THIS
+// PRODUCT, EVEN IF THE AUTHOR OF THIS SOFTWARE PRODUCT IS AWARE OF THE POSSIBILITY OF SUCH
+// DAMAGES AND KNOWN DEFECTS, ANY CLAIM BY A THIRD PARTY AND EVEN IF THE REMEDY FAILS OF ITS
+// ESSENTIAL PURPOSE.
+//
+// --------------------------------------------------------------------------------------------------
+
+
+global proc shapesUI_deleteDockControl()
+{
+	if (`dockControl -ex SHAPESDock`)
+		deleteUI SHAPESDock;
+	else if (`window -ex SHAPESDockWin`)
+		deleteUI SHAPESDockWin;
+}
+
+
+global proc shapesUI_createDockControl()
+{
+	// define the area and float state of the dock control
+	string $dockArea = "right";
+	int $dockFloat = 0;
+	$dockArea = `optionVar -q SHAPESCurrentDockPosition`;
+	$dockFloat = `optionVar -q SHAPESCurrentDockFloat`;
+	
+	string $floatFlag = "-fl " + $dockFloat;
+	if (`shapesCommon_getMayaVersion` >= 2016)
+		$floatFlag = "";
+	string $dockCmd = "dockControl -w 372 -aa all -a " + $dockArea + " " + $floatFlag + " -l \"SHAPES\" -con SHAPESDockWin SHAPESDock";
+	eval $dockCmd;
+	
+	string $floatCmd = "{optionVar -sv SHAPESCurrentDockPosition (`dockControl -q -area SHAPESDock`); optionVar -iv SHAPESCurrentDockFloat (`dockControl -q -fl SHAPESDock`);}";
+	dockControl -e -r -fcc $floatCmd SHAPESDock;
+}
+
+
+global proc string shapesUI_createWindow()
+{
+	// delete the ui if it exists
+	shapesUI_deleteDockControl;
+	
+	string $win = `window -t "SHAPES" -w 370 SHAPESDockWin`;
+	
+	return $win;
+}
+
+
+global proc SHAPES_uiDockControl(){}

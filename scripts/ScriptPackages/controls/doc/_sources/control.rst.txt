@@ -1,0 +1,15 @@
+control
+=======
+
+control api
+-----------
+.. automodule:: control
+    :members:
+
+control example
+---------------
+.. literalinclude:: control_example.py
+
+fk rig example
+--------------
+.. literalinclude:: fk_rig.py

@@ -1,0 +1,7 @@
+fit: loop_curve
+group: Eyelid
+rml: Right
+layer: Eyelid
+number: 10
+rig: loopCurve
+fName: EyelidLoopRightLoopCurve

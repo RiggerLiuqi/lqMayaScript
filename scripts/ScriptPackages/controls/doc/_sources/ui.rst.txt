@@ -1,0 +1,11 @@
+ui
+====
+
+ui api
+------
+.. automodule:: ui
+    :members:
+
+ui show
+-------
+.. literalinclude:: control_show.py
